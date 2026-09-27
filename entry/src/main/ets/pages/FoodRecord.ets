@@ -3,6 +3,7 @@ import { router } from '@kit.ArkUI';
 import { util } from '@kit.ArkTS';
 import { FoodItem, FoodRecord } from '../model/NutritionModels';
 import { FoodRecordStore } from '../service/FoodRecordStore';
+import { FoodDatabaseCrypto } from '../service/FoodDatabaseCrypto';
 import { NutritionDateUtils } from '../service/NutritionDateUtils';
 
 interface FoodRecordParams {
@@ -128,7 +129,8 @@ struct FoodRecordPage {
   async loadFoodDatabase(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      const content: Uint8Array = await context.resourceManager.getRawFileContent('food_composition.csv');
+      const encrypted: Uint8Array = await context.resourceManager.getRawFileContent('a7f3c91e5b2d4a6081f6c0e9.bin');
+      const content: Uint8Array = await FoodDatabaseCrypto.decrypt(encrypted);
       const csvText: string = new util.TextDecoder().decodeToString(content).replace(/\r/g, '');
       const lines: string[] = csvText.split('\n');
       const loadedFoods: FoodItem[] = [];
