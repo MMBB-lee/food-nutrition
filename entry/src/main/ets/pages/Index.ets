@@ -1,16 +1,13 @@
 import { common } from '@kit.AbilityKit';
-import { preferences } from '@kit.ArkData';
-import { reminderAgentManager } from '@kit.BackgroundTasksKit';
-import { notificationManager } from '@kit.NotificationKit';
 import { router } from '@kit.ArkUI';
+import { MealSettingsSnapshot, MealTimeSettings } from '../model/MealModels';
 import { DailyNutritionSummary, FoodRecord } from '../model/NutritionModels';
-import { LocalNutritionStore } from '../service/LocalNutritionStore';
-
-interface MealTimeSettings {
-  breakfastMinutes: number;
-  lunchMinutes: number;
-  dinnerMinutes: number;
-}
+import { FoodRecordStore } from '../service/FoodRecordStore';
+import { MealProgressStore } from '../service/MealProgressStore';
+import { MealReminderService, NotificationVibrationStatus } from '../service/MealReminderService';
+import { MealSettingsStore } from '../service/MealSettingsStore';
+import { NutritionDateUtils } from '../service/NutritionDateUtils';
+import { NutritionTargetStore } from '../service/NutritionTargetStore';
 
 @Entry
 @Component
@@ -65,12 +62,13 @@ struct Index {
   @State editingFatTarget: number = 60;
   @State fatTargetInput: string = '60';
   @State dashboardNutrientIndex: number = 0;
+  @State dashboardRingProgress: number = 0;
   private clockTimer: number = -1;
   private dashboardDayKey: string = '';
   private mealTimeSavePending: boolean = false;
   private notificationToastTimer: number = -1;
-  private mealReminderIds: number[] = [];
-  private settingsPreferences: preferences.Preferences | undefined = undefined;
+  private dashboardProgressTimer: number = -1;
+  private mealSettingsStore: MealSettingsStore = new MealSettingsStore();
   private pageScroller: Scroller = new Scroller();
   private crownDegreeRemainder: number = 0;
   private crownActiveTimeField: string = '';
@@ -85,7 +83,7 @@ struct Index {
     this.clockTimer = setInterval(() => {
       this.nowTimestamp = Date.now();
       this.resetDailyCompletionIfNeeded();
-      if (this.dashboardDayKey !== LocalNutritionStore.getDayKey(this.nowTimestamp)) {
+      if (this.dashboardDayKey !== NutritionDateUtils.getDayKey(this.nowTimestamp)) {
         this.loadDashboardData();
       }
     }, 30000);
@@ -160,16 +158,16 @@ struct Index {
   async loadDashboardData(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      await LocalNutritionStore.getFirstUseDayKey(context);
-      const dayKey: string = LocalNutritionStore.getDayKey();
-      const records: FoodRecord[] = await LocalNutritionStore.getFoodRecordsByDay(
+      await NutritionTargetStore.getFirstUseDayKey(context);
+      const dayKey: string = NutritionDateUtils.getDayKey();
+      const records: FoodRecord[] = await FoodRecordStore.getByDay(
         context, dayKey);
-      const summary: DailyNutritionSummary = LocalNutritionStore.summarize(records);
-      const calorieTarget: number = await LocalNutritionStore.getCalorieTarget(context);
-      const carbohydrateTarget: number = await LocalNutritionStore.getCarbohydrateTarget(context);
-      const proteinTarget: number = await LocalNutritionStore.getProteinTarget(context);
-      const fatTarget: number = await LocalNutritionStore.getFatTarget(context);
-      if (dayKey !== LocalNutritionStore.getDayKey()) {
+      const summary: DailyNutritionSummary = FoodRecordStore.summarize(records);
+      const calorieTarget: number = await NutritionTargetStore.getCalorieTarget(context);
+      const carbohydrateTarget: number = await NutritionTargetStore.getCarbohydrateTarget(context);
+      const proteinTarget: number = await NutritionTargetStore.getProteinTarget(context);
+      const fatTarget: number = await NutritionTargetStore.getFatTarget(context);
+      if (dayKey !== NutritionDateUtils.getDayKey()) {
         await this.loadDashboardData();
         return;
       }
@@ -190,6 +188,7 @@ struct Index {
       this.proteinTargetInput = `${this.dailyProteinTarget}`;
       this.editingFatTarget = this.dailyFatTarget;
       this.fatTargetInput = `${this.dailyFatTarget}`;
+      this.resetDashboardRingProgress();
     } catch (error) {
       console.error(`load dashboard data failed: ${JSON.stringify(error)}`);
     }
@@ -198,24 +197,16 @@ struct Index {
   async loadMealSettings(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      this.settingsPreferences = await preferences.getPreferences(context, { name: 'meal_settings' });
-      const setupComplete: boolean = await this.settingsPreferences.get('setupComplete', false) as boolean;
-      const privacyAccepted: boolean =
-        await this.settingsPreferences.get('privacyAccepted', false) as boolean;
-      const savedBreakfast: number = await this.settingsPreferences.get('breakfastMinutes', 480) as number;
-      const savedLunch: number = await this.settingsPreferences.get('lunchMinutes', 720) as number;
-      const savedDinner: number = await this.settingsPreferences.get('dinnerMinutes', 1080) as number;
-      const savedNotificationEnabled: boolean =
-        await this.settingsPreferences.get('notificationEnabled', false) as boolean;
+      const settings: MealSettingsSnapshot = await this.mealSettingsStore.load(context);
 
-      if (savedBreakfast < savedLunch && savedLunch < savedDinner) {
-        this.breakfastMinutes = savedBreakfast;
-        this.lunchMinutes = savedLunch;
-        this.dinnerMinutes = savedDinner;
+      if (settings.breakfastMinutes < settings.lunchMinutes && settings.lunchMinutes < settings.dinnerMinutes) {
+        this.breakfastMinutes = settings.breakfastMinutes;
+        this.lunchMinutes = settings.lunchMinutes;
+        this.dinnerMinutes = settings.dinnerMinutes;
       }
-      this.showInitialSetup = !setupComplete;
-      this.showPrivacyConsent = !privacyAccepted;
-      this.notificationEnabled = savedNotificationEnabled;
+      this.showInitialSetup = !settings.setupComplete;
+      this.showPrivacyConsent = !settings.privacyAccepted;
+      this.notificationEnabled = settings.notificationEnabled;
     } catch (error) {
       console.error(`load meal settings failed: ${JSON.stringify(error)}`);
       this.showPrivacyConsent = true;
@@ -224,7 +215,7 @@ struct Index {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
       if (!this.showInitialSetup) {
-        const resolvedIndex: number = await LocalNutritionStore.resolveMealProgress(
+        const resolvedIndex: number = await MealProgressStore.resolve(
           context, this.breakfastMinutes, this.lunchMinutes, this.dinnerMinutes);
         this.applyMealProgress(resolvedIndex);
       } else {
@@ -240,13 +231,10 @@ struct Index {
   }
 
   async acceptPrivacyConsent(): Promise<void> {
-    if (this.settingsPreferences === undefined) return;
-    try {
-      await this.settingsPreferences.put('privacyAccepted', true);
-      await this.settingsPreferences.flush();
+    const saved: boolean = await this.mealSettingsStore.acceptPrivacyConsent();
+    if (saved) {
       this.showPrivacyConsent = false;
-    } catch (error) {
-      console.error(`save privacy consent failed: ${JSON.stringify(error)}`);
+    } else {
       this.showNotificationStatus('隐私设置保存失败');
     }
   }
@@ -262,44 +250,21 @@ struct Index {
   }
 
   async persistMealSettings(markSetupComplete: boolean = false, times?: MealTimeSettings): Promise<boolean> {
-    if (this.settingsPreferences === undefined) {
-      return false;
-    }
-    try {
-      await this.settingsPreferences.put('breakfastMinutes',
-        times === undefined ? this.breakfastMinutes : times.breakfastMinutes);
-      await this.settingsPreferences.put('lunchMinutes',
-        times === undefined ? this.lunchMinutes : times.lunchMinutes);
-      await this.settingsPreferences.put('dinnerMinutes',
-        times === undefined ? this.dinnerMinutes : times.dinnerMinutes);
-      if (markSetupComplete) {
-        await this.settingsPreferences.put('setupComplete', true);
-      }
-      await this.settingsPreferences.flush();
-      return true;
-    } catch (error) {
-      console.error(`save meal settings failed: ${JSON.stringify(error)}`);
-      return false;
-    }
+    const targetTimes: MealTimeSettings = times === undefined ? {
+      breakfastMinutes: this.breakfastMinutes,
+      lunchMinutes: this.lunchMinutes,
+      dinnerMinutes: this.dinnerMinutes
+    } : times;
+    return this.mealSettingsStore.saveMealTimes(targetTimes, markSetupComplete);
   }
 
   async persistNotificationSetting(enabled: boolean): Promise<boolean> {
-    if (this.settingsPreferences === undefined) {
-      return false;
-    }
-    try {
-      await this.settingsPreferences.put('notificationEnabled', enabled);
-      await this.settingsPreferences.flush();
-      return true;
-    } catch (error) {
-      console.error(`save notification setting failed: ${JSON.stringify(error)}`);
-      return false;
-    }
+    return this.mealSettingsStore.saveNotificationEnabled(enabled);
   }
 
   async restoreNotificationSetting(): Promise<void> {
     try {
-      const systemEnabled: boolean = await notificationManager.isNotificationEnabled();
+      const systemEnabled: boolean = await MealReminderService.isNotificationEnabled();
       if (!systemEnabled) {
         this.notificationEnabled = false;
         await this.persistNotificationSetting(false);
@@ -339,6 +304,10 @@ struct Index {
       clearTimeout(this.notificationToastTimer);
       this.notificationToastTimer = -1;
     }
+    if (this.dashboardProgressTimer >= 0) {
+      clearTimeout(this.dashboardProgressTimer);
+      this.dashboardProgressTimer = -1;
+    }
   }
 
   formatTime(totalMinutes: number): string {
@@ -351,8 +320,7 @@ struct Index {
   }
 
   getDayKey(timestamp: number): string {
-    const date: Date = new Date(timestamp);
-    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    return NutritionDateUtils.getDayKey(timestamp);
   }
 
   resetDailyCompletionIfNeeded(): void {
@@ -379,7 +347,7 @@ struct Index {
   async syncMealProgressWithTime(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      const resolvedIndex: number = await LocalNutritionStore.resolveMealProgress(
+      const resolvedIndex: number = await MealProgressStore.resolve(
         context, this.breakfastMinutes, this.lunchMinutes, this.dinnerMinutes);
       const currentIndex: number = this.allMealsCompleted ? 3 : this.nextMealIndex;
       if (resolvedIndex !== currentIndex || this.completionDayKey !== this.getDayKey(Date.now())) {
@@ -394,7 +362,7 @@ struct Index {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
       const dayKey: string = nextMealIndex < 0 ? '' : this.getDayKey(Date.now());
-      await LocalNutritionStore.saveMealProgress(context, dayKey, nextMealIndex);
+      await MealProgressStore.save(context, dayKey, nextMealIndex);
     } catch (error) {
       console.error(`save meal progress failed: ${JSON.stringify(error)}`);
     }
@@ -413,10 +381,10 @@ struct Index {
       this.editingFatTarget = this.normalizeNutritionTarget(this.fatTargetInput,
         this.editingFatTarget, 1, 500, this.dailyFatTarget);
       this.calorieTargetInput = `${this.editingCalorieTarget}`;
-      await LocalNutritionStore.setCalorieTarget(context, this.editingCalorieTarget);
-      await LocalNutritionStore.setCarbohydrateTarget(context, this.editingCarbohydrateTarget);
-      await LocalNutritionStore.setProteinTarget(context, this.editingProteinTarget);
-      await LocalNutritionStore.setFatTarget(context, this.editingFatTarget);
+      await NutritionTargetStore.setCalorieTarget(context, this.editingCalorieTarget);
+      await NutritionTargetStore.setCarbohydrateTarget(context, this.editingCarbohydrateTarget);
+      await NutritionTargetStore.setProteinTarget(context, this.editingProteinTarget);
+      await NutritionTargetStore.setFatTarget(context, this.editingFatTarget);
       this.dailyCalorieTarget = this.editingCalorieTarget;
       this.dailyCarbohydrateTarget = this.editingCarbohydrateTarget;
       this.dailyProteinTarget = this.editingProteinTarget;
@@ -424,6 +392,7 @@ struct Index {
       this.carbohydrateTargetInput = `${this.dailyCarbohydrateTarget}`;
       this.proteinTargetInput = `${this.dailyProteinTarget}`;
       this.fatTargetInput = `${this.dailyFatTarget}`;
+      this.resetDashboardRingProgress();
       this.showNutritionSettings = false;
       this.showSettings = true;
       this.showNotificationStatus('营养目标已保存');
@@ -452,6 +421,31 @@ struct Index {
     if (this.dashboardNutrientIndex === 2) return this.dailyProteinTarget;
     if (this.dashboardNutrientIndex === 3) return this.dailyFatTarget;
     return this.dailyCalorieTarget;
+  }
+
+  getDashboardProgressPercent(): number {
+    const target: number = this.getDashboardNutrientTarget();
+    if (target <= 0) return 0;
+    return Math.max(0, Math.min(100, this.getDashboardNutrientValue() / target * 100));
+  }
+
+  selectDashboardNutrient(index: number): void {
+    this.resetDashboardRingProgress();
+    this.dashboardNutrientIndex = index;
+  }
+
+  resetDashboardRingProgress(): void {
+    if (this.dashboardProgressTimer >= 0) {
+      clearTimeout(this.dashboardProgressTimer);
+      this.dashboardProgressTimer = -1;
+    }
+    this.dashboardRingProgress = 0;
+    this.dashboardProgressTimer = setTimeout(() => {
+      this.dashboardProgressTimer = -1;
+      this.getUIContext().animateTo({ duration: 500, curve: Curve.EaseOut }, () => {
+        this.dashboardRingProgress = this.getDashboardProgressPercent();
+      });
+    }, 50);
   }
 
   getDashboardNutrientRemaining(): number {
@@ -797,137 +791,30 @@ struct Index {
   }
 
   async cancelMealNotification(): Promise<void> {
-    try {
-      await reminderAgentManager.cancelAllReminders();
-    } catch (error) {
-      console.error(`cancel meal notification failed: ${JSON.stringify(error)}`);
-    }
-    this.mealReminderIds = [];
+    await MealReminderService.cancelAll();
   }
 
   async scheduleMealNotifications(): Promise<boolean> {
-    if (!this.notificationEnabled) {
-      return false;
-    }
-
-    try {
-      // Agent reminders only support selecting a slot type. They do not support setting
-      // NotificationSlot.vibrationEnabled directly, so explicitly use the high-level service
-      // information slot instead of allowing the system to fall back to an unknown/min slot.
-      await reminderAgentManager.addNotificationSlot({
-        notificationType: notificationManager.SlotType.SERVICE_INFORMATION
-      });
-      try {
-        const reminderSlot: notificationManager.NotificationSlot = await notificationManager.getSlot(
-          notificationManager.SlotType.SERVICE_INFORMATION);
-        console.info(`meal reminder slot state: ${JSON.stringify(reminderSlot)}`);
-      } catch (slotError) {
-        // Slot creation is owned by the reminder-agent service. A failed diagnostic read must not
-        // prevent the system-owned reminders from being scheduled.
-        console.warn(`read meal reminder slot failed: ${JSON.stringify(slotError)}`);
-      }
-
-      // Update reminders already held by the system. Do not cancel them first: if the app is
-      // terminated while rebuilding, the old background reminders must remain available.
-      const existingReminders: Array<reminderAgentManager.ReminderInfo> =
-        await reminderAgentManager.getAllValidReminders();
-      const scheduledIds: number[] = [];
-      const retainedReminderIds: number[] = [];
-      const mealMinutes: number[] = [this.breakfastMinutes, this.lunchMinutes, this.dinnerMinutes];
-      const everyMonth: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-      const everyDayOfMonth: number[] = [
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31
-      ];
-      for (let index: number = 0; index < mealMinutes.length; index++) {
-        const reminderMinutes: number = (mealMinutes[index] - 20 + 1440) % 1440;
-        const mealName: string = this.getMealNotificationName(index);
-        // Use a calendar notification, not an alarm. The system notification slot controls its haptic pattern.
-        // Start at the next occurrence so rescheduling after a meal never fires an already elapsed reminder.
-        const firstReminderDate: Date = new Date();
-        firstReminderDate.setHours(Math.floor(reminderMinutes / 60), reminderMinutes % 60, 0, 0);
-        if (firstReminderDate.getTime() <= Date.now()) {
-          firstReminderDate.setDate(firstReminderDate.getDate() + 1);
-        }
-        const reminderRequest: reminderAgentManager.ReminderRequestCalendar = {
-          reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
-          dateTime: {
-            year: firstReminderDate.getFullYear(),
-            month: firstReminderDate.getMonth() + 1,
-            day: firstReminderDate.getDate(),
-            hour: Math.floor(reminderMinutes / 60),
-            minute: reminderMinutes % 60,
-            second: 0
-          },
-          repeatMonths: everyMonth,
-          repeatDays: everyDayOfMonth,
-          title: '就餐提醒',
-          content: `距离${mealName}还有20分钟`,
-          expiredContent: `${mealName}时间快到了`,
-          notificationId: 2001 + index,
-          slotType: notificationManager.SlotType.SERVICE_INFORMATION,
-          actionButton: [{
-            title: '删除',
-            type: reminderAgentManager.ActionButtonType.ACTION_BUTTON_TYPE_CLOSE
-          }],
-          // Use the wearable's normal reminder channel, not an alarm slot. A one-second alert
-          // lets the system play its notification haptic pattern; 0 suppresses that alert stage.
-          ringDuration: 1,
-          tapDismissed: true,
-          wantAgent: {
-            pkgName: 'com.lmmbb.foodnutrition',
-            abilityName: 'EntryAbility'
-          },
-          // 设备未在使用时自动拉起提醒界面，使息屏状态能够亮屏提示。
-          maxScreenWantAgent: {
-            pkgName: 'com.lmmbb.foodnutrition',
-            abilityName: 'EntryAbility'
-          }
-        };
-        const existingReminder: reminderAgentManager.ReminderInfo | undefined = existingReminders.find(
-          (info: reminderAgentManager.ReminderInfo) => info.reminderReq.notificationId === 2001 + index);
-        if (existingReminder !== undefined) {
-          await reminderAgentManager.updateReminder(existingReminder.reminderId, reminderRequest);
-          scheduledIds.push(existingReminder.reminderId);
-          retainedReminderIds.push(existingReminder.reminderId);
-        } else {
-          const reminderId: number = await reminderAgentManager.publishReminder(reminderRequest);
-          scheduledIds.push(reminderId);
-          retainedReminderIds.push(reminderId);
-        }
-      }
-
-      // Remove only stale duplicate meal reminders after all current reminders are safely stored.
-      for (let index: number = 0; index < existingReminders.length; index++) {
-        const info: reminderAgentManager.ReminderInfo = existingReminders[index];
-        const notificationId: number | undefined = info.reminderReq.notificationId;
-        const isMealReminder: boolean = notificationId !== undefined &&
-          notificationId >= 2001 && notificationId <= 2003;
-        if (isMealReminder && retainedReminderIds.indexOf(info.reminderId) < 0) {
-          await reminderAgentManager.cancelReminder(info.reminderId);
-        }
-      }
-      this.mealReminderIds = scheduledIds;
-      return true;
-    } catch (error) {
-      console.error(`schedule meal notification failed: ${JSON.stringify(error)}`);
+    if (!this.notificationEnabled) return false;
+    const scheduled: boolean = await MealReminderService.schedule({
+      breakfastMinutes: this.breakfastMinutes,
+      lunchMinutes: this.lunchMinutes,
+      dinnerMinutes: this.dinnerMinutes
+    });
+    if (!scheduled) {
       this.showNotificationStatus('提醒设置失败');
-      return false;
     }
+    return scheduled;
   }
 
   async checkNotificationVibrationSetting(): Promise<void> {
     try {
-      const settings = await notificationManager.getNotificationSetting();
-      const slot: notificationManager.NotificationSlot = await notificationManager.getSlot(
-        notificationManager.SlotType.SERVICE_INFORMATION);
-      if (!settings.vibrationEnabled || slot.enabled === false || slot.vibrationEnabled !== true) {
+      const status: NotificationVibrationStatus = await MealReminderService.getVibrationStatus();
+      if (status === NotificationVibrationStatus.DISABLED) {
         this.showNotificationStatus('请在通知设置中开启服务提醒振动');
         const context: common.UIAbilityContext =
           this.getUIContext().getHostContext() as common.UIAbilityContext;
-        await notificationManager.openNotificationSettings(context);
-      } else {
-        console.info('meal reminder vibration is enabled by both system and notification slot');
+        await MealReminderService.openNotificationSettings(context);
       }
     } catch (error) {
       console.warn(`read notification vibration setting failed: ${JSON.stringify(error)}`);
@@ -944,12 +831,12 @@ struct Index {
     }
 
     try {
-      let systemEnabled: boolean = await notificationManager.isNotificationEnabled();
+      let systemEnabled: boolean = await MealReminderService.isNotificationEnabled();
       if (!systemEnabled) {
         const context: common.UIAbilityContext =
           this.getUIContext().getHostContext() as common.UIAbilityContext;
-        await notificationManager.requestEnableNotification(context);
-        systemEnabled = await notificationManager.isNotificationEnabled();
+        await MealReminderService.requestEnableNotification(context);
+        systemEnabled = await MealReminderService.isNotificationEnabled();
       }
       if (!systemEnabled) {
         this.notificationEnabled = false;
@@ -1019,12 +906,6 @@ struct Index {
       return '午餐☀️';
     }
     return '晚餐🌙';
-  }
-
-  getMealNotificationName(index: number): string {
-    if (index === 0) return '早餐';
-    if (index === 1) return '午餐';
-    return '晚餐';
   }
 
   getEditingMealName(): string {
@@ -1137,12 +1018,11 @@ struct Index {
           .fontColor('#AAB5AF')
           .textAlign(TextAlign.Center)
           .onClick(() => {
-            this.dashboardNutrientIndex = (this.dashboardNutrientIndex + 3) % 4;
+            this.selectDashboardNutrient((this.dashboardNutrientIndex + 3) % 4);
           })
 
         Stack({ alignContent: Alignment.Center }) {
-          Progress({ value: Math.min(this.getDashboardNutrientValue(), this.getDashboardNutrientTarget()),
-            total: this.getDashboardNutrientTarget(), type: ProgressType.Ring })
+          Progress({ value: this.dashboardRingProgress, total: 100, type: ProgressType.Ring })
             .width(92)
             .height(92)
             .color(this.getDashboardNutrientColor())
@@ -1180,7 +1060,7 @@ struct Index {
           .fontColor('#AAB5AF')
           .textAlign(TextAlign.Center)
           .onClick(() => {
-            this.dashboardNutrientIndex = (this.dashboardNutrientIndex + 1) % 4;
+            this.selectDashboardNutrient((this.dashboardNutrientIndex + 1) % 4);
           })
       }
       .width(140)

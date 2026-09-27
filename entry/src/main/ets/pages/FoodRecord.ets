@@ -2,7 +2,8 @@ import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { util } from '@kit.ArkTS';
 import { FoodItem, FoodRecord } from '../model/NutritionModels';
-import { LocalNutritionStore } from '../service/LocalNutritionStore';
+import { FoodRecordStore } from '../service/FoodRecordStore';
+import { NutritionDateUtils } from '../service/NutritionDateUtils';
 
 interface FoodRecordParams {
   mealIndex: number;
@@ -242,7 +243,7 @@ struct FoodRecordPage {
     const record: FoodRecord = {
       id: `${now}_${Math.floor(Math.random() * 100000)}`,
       recordedAt: now,
-      dayKey: LocalNutritionStore.getDayKey(now),
+      dayKey: NutritionDateUtils.getDayKey(now),
       mealIndex: this.mealIndex,
       foodCode: food.foodCode,
       foodName: food.name,
@@ -274,7 +275,7 @@ struct FoodRecordPage {
     };
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      await LocalNutritionStore.addFoodRecord(context, record);
+      await FoodRecordStore.add(context, record);
       await this.loadTodayMealStats();
       this.showWeight = false;
       this.showDetail = false;
@@ -290,8 +291,8 @@ struct FoodRecordPage {
   async loadTodayMealStats(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      const records: FoodRecord[] = await LocalNutritionStore.getFoodRecordsByDay(
-        context, LocalNutritionStore.getDayKey());
+      const records: FoodRecord[] = await FoodRecordStore.getByDay(
+        context, NutritionDateUtils.getDayKey());
       const counts: number[] = [0, 0, 0];
       const calories: number[] = [0, 0, 0];
       records.forEach((record: FoodRecord) => {

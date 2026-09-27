@@ -1,7 +1,10 @@
 import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { DailyNutritionSummary, FoodRecord } from '../model/NutritionModels';
-import { LocalNutritionStore } from '../service/LocalNutritionStore';
+import { FoodRecordStore } from '../service/FoodRecordStore';
+import { MealProgressStore } from '../service/MealProgressStore';
+import { NutritionDateUtils } from '../service/NutritionDateUtils';
+import { NutritionTargetStore } from '../service/NutritionTargetStore';
 
 @Entry
 @Component
@@ -41,11 +44,11 @@ struct TodayNutritionPage {
   async loadTodayData(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      this.records = await LocalNutritionStore.getFoodRecordsByDay(context, LocalNutritionStore.getDayKey());
-      const summary: DailyNutritionSummary = LocalNutritionStore.summarize(this.records);
+      this.records = await FoodRecordStore.getByDay(context, NutritionDateUtils.getDayKey());
+      const summary: DailyNutritionSummary = FoodRecordStore.summarize(this.records);
       this.todayCalories = summary.calories;
-      this.calorieTarget = await LocalNutritionStore.getCalorieTarget(context);
-      this.nextMealIndex = await LocalNutritionStore.resolveMealProgressFromSettings(context);
+      this.calorieTarget = await NutritionTargetStore.getCalorieTarget(context);
+      this.nextMealIndex = await MealProgressStore.resolveFromSettings(context);
       this.unlockedMealIndex = Math.min(this.nextMealIndex, 2);
     } catch (error) {
       console.error(`load today nutrition failed: ${JSON.stringify(error)}`);
@@ -91,7 +94,7 @@ struct TodayNutritionPage {
   async saveWeight(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      await LocalNutritionStore.updateFoodRecordWeight(context, this.selectedRecordId, this.editingWeight);
+      await FoodRecordStore.updateWeight(context, this.selectedRecordId, this.editingWeight);
       this.showEditor = false;
       await this.loadTodayData();
     } catch (error) {
@@ -102,7 +105,7 @@ struct TodayNutritionPage {
   async deleteRecord(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      await LocalNutritionStore.deleteFoodRecord(context, this.selectedRecordId);
+      await FoodRecordStore.delete(context, this.selectedRecordId);
       this.showEditor = false;
       await this.loadTodayData();
     } catch (error) {

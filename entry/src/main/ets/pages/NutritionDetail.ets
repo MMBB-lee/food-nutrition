@@ -1,7 +1,8 @@
 import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { FoodRecord } from '../model/NutritionModels';
-import { LocalNutritionStore } from '../service/LocalNutritionStore';
+import { FoodRecordStore } from '../service/FoodRecordStore';
+import { NutritionDateUtils } from '../service/NutritionDateUtils';
 
 interface NutritionDetailParams {
   dayKey?: string;
@@ -20,13 +21,13 @@ struct NutritionDetailPage {
   aboutToAppear(): void {
     const params: NutritionDetailParams = router.getParams() as NutritionDetailParams;
     this.selectedDayKey = params !== undefined && params.dayKey !== undefined ?
-      params.dayKey : LocalNutritionStore.getDayKey();
+      params.dayKey : NutritionDateUtils.getDayKey();
     this.loadRecords();
   }
 
   onPageShow(): void {
     if (this.selectedDayKey.length === 0) {
-      this.selectedDayKey = LocalNutritionStore.getDayKey();
+      this.selectedDayKey = NutritionDateUtils.getDayKey();
     }
     this.loadRecords();
   }
@@ -34,7 +35,7 @@ struct NutritionDetailPage {
   async loadRecords(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      this.records = await LocalNutritionStore.getFoodRecordsByDay(context, this.selectedDayKey);
+      this.records = await FoodRecordStore.getByDay(context, this.selectedDayKey);
     } catch (error) {
       console.error(`load nutrition detail failed: ${JSON.stringify(error)}`);
     }
@@ -264,7 +265,7 @@ struct NutritionDetailPage {
         .fontColor('#F7FAF8')
         .textAlign(TextAlign.Center)
 
-      if (this.selectedDayKey !== LocalNutritionStore.getDayKey()) {
+      if (this.selectedDayKey !== NutritionDateUtils.getDayKey()) {
         Text(this.getSelectedDayLabel())
           .fontSize(8)
           .fontColor('#AAB5AF')

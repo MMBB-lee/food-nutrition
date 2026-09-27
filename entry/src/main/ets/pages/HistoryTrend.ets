@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { NutritionHistoryDay } from '../model/NutritionModels';
-import { LocalNutritionStore } from '../service/LocalNutritionStore';
+import { NutritionTargetStore } from '../service/NutritionTargetStore';
 
 @Entry
 @Component
@@ -26,7 +26,7 @@ struct HistoryTrendPage {
   async loadHistory(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      this.history = await LocalNutritionStore.getNutritionHistory(context, this.selectedRange);
+      this.history = await NutritionTargetStore.getHistory(context, this.selectedRange);
       if (this.selectedRange === 30) {
         setTimeout(() => {
           this.calorieChartScroller.scrollEdge(Edge.End);
