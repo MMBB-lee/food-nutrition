@@ -3,6 +3,9 @@ import { reminderAgentManager } from '@kit.BackgroundTasksKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { MealTimeSettings } from '../model/MealModels';
 
+const MEAL_REMINDER_SLOT_TYPE: notificationManager.SlotType =
+  notificationManager.SlotType.SOCIAL_COMMUNICATION;
+
 export enum NotificationVibrationStatus {
   UNAVAILABLE = -1,
   DISABLED = 0,
@@ -33,11 +36,13 @@ export class MealReminderService {
   static async schedule(times: MealTimeSettings): Promise<boolean> {
     try {
       await reminderAgentManager.addNotificationSlot({
-        notificationType: notificationManager.SlotType.SERVICE_INFORMATION
+        notificationType: MEAL_REMINDER_SLOT_TYPE,
+        vibrationEnabled: true,
+        vibrationValues: [400]
       });
       try {
         const reminderSlot: notificationManager.NotificationSlot = await notificationManager.getSlot(
-          notificationManager.SlotType.SERVICE_INFORMATION);
+          MEAL_REMINDER_SLOT_TYPE);
         console.info(`meal reminder slot state: ${JSON.stringify(reminderSlot)}`);
       } catch (slotError) {
         console.warn(`read meal reminder slot failed: ${JSON.stringify(slotError)}`);
@@ -76,7 +81,7 @@ export class MealReminderService {
           content: `距离${mealName}还有20分钟`,
           expiredContent: `${mealName}时间快到了`,
           notificationId: 2001 + index,
-          slotType: notificationManager.SlotType.SERVICE_INFORMATION,
+          slotType: MEAL_REMINDER_SLOT_TYPE,
           actionButton: [{
             title: '删除',
             type: reminderAgentManager.ActionButtonType.ACTION_BUTTON_TYPE_CLOSE
@@ -95,8 +100,14 @@ export class MealReminderService {
         const existingReminder: reminderAgentManager.ReminderInfo | undefined = existingReminders.find(
           (info: reminderAgentManager.ReminderInfo) => info.reminderReq.notificationId === 2001 + index);
         if (existingReminder !== undefined) {
-          await reminderAgentManager.updateReminder(existingReminder.reminderId, reminderRequest);
-          retainedReminderIds.push(existingReminder.reminderId);
+          try {
+            await reminderAgentManager.updateReminder(existingReminder.reminderId, reminderRequest);
+            retainedReminderIds.push(existingReminder.reminderId);
+          } catch (updateError) {
+            console.warn(`update meal reminder failed, republish it: ${JSON.stringify(updateError)}`);
+            const reminderId: number = await reminderAgentManager.publishReminder(reminderRequest);
+            retainedReminderIds.push(reminderId);
+          }
         } else {
           const reminderId: number = await reminderAgentManager.publishReminder(reminderRequest);
           retainedReminderIds.push(reminderId);
@@ -109,7 +120,11 @@ export class MealReminderService {
         const isMealReminder: boolean = notificationId !== undefined &&
           notificationId >= 2001 && notificationId <= 2003;
         if (isMealReminder && retainedReminderIds.indexOf(info.reminderId) < 0) {
-          await reminderAgentManager.cancelReminder(info.reminderId);
+          try {
+            await reminderAgentManager.cancelReminder(info.reminderId);
+          } catch (cancelError) {
+            console.warn(`cancel stale meal reminder failed: ${JSON.stringify(cancelError)}`);
+          }
         }
       }
       return true;
@@ -123,7 +138,7 @@ export class MealReminderService {
     try {
       const settings = await notificationManager.getNotificationSetting();
       const slot: notificationManager.NotificationSlot = await notificationManager.getSlot(
-        notificationManager.SlotType.SERVICE_INFORMATION);
+        MEAL_REMINDER_SLOT_TYPE);
       if (!settings.vibrationEnabled || slot.enabled === false || slot.vibrationEnabled !== true) {
         return NotificationVibrationStatus.DISABLED;
       }

@@ -811,7 +811,7 @@ struct Index {
     try {
       const status: NotificationVibrationStatus = await MealReminderService.getVibrationStatus();
       if (status === NotificationVibrationStatus.DISABLED) {
-        this.showNotificationStatus('请在通知设置中开启服务提醒振动');
+        this.showNotificationStatus('请在通知设置中开启通知振动');
         const context: common.UIAbilityContext =
           this.getUIContext().getHostContext() as common.UIAbilityContext;
         await MealReminderService.openNotificationSettings(context);
