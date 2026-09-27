@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="食刻营养隐私政策与权限说明">
+  <title>食刻营养隐私政策</title>
+  <style>
+    :root {
+      --ink: #20242a;
+      --muted: #747b84;
+      --line: #e6e9ed;
+      --accent: #67D89A;
+      --accent-soft: #effbf5;
+      --warm: #b7791f;
+      --page: #f4f6f7;
+      --paper: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      line-height: 1.82;
+    }
+
+    main {
+      width: min(100%, 820px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: max(34px, env(safe-area-inset-top)) 54px
+        max(52px, env(safe-area-inset-bottom));
+      background: var(--paper);
+      border-top: 5px solid var(--accent);
+    }
+
+    header {
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      color: #15191e;
+      font-size: 30px;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .dates {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .intro {
+      margin: 26px 0 8px;
+    }
+
+    section {
+      padding: 8px 0 20px;
+      scroll-margin-top: 18px;
+    }
+
+    h2 {
+      margin: 20px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      color: #18201f;
+      font-size: 21px;
+      line-height: 1.45;
+      font-weight: 800;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    ol,
+    ul {
+      margin: 10px 0;
+      padding-left: 25px;
+    }
+
+    li {
+      margin: 5px 0;
+      padding-left: 3px;
+    }
+
+    .permission-list {
+      margin-top: 14px;
+      padding: 4px 18px;
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+    }
+
+    .permission-list strong {
+      color: #67D89A;
+    }
+
+    .notice {
+      margin-top: 14px;
+      padding: 14px 18px;
+      color: #62420f;
+      background: #fffaf0;
+      border-left: 4px solid var(--warm);
+    }
+
+    .contact {
+      margin-top: 14px;
+      padding: 16px 18px;
+      background: #fffaf0;
+      border-left: 4px solid var(--warm);
+    }
+
+    .contact p {
+      margin: 4px 0;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    footer {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        background: var(--paper);
+        font-size: 15px;
+        line-height: 1.76;
+      }
+
+      main {
+        width: 100%;
+        padding: max(25px, env(safe-area-inset-top)) 20px
+          max(38px, env(safe-area-inset-bottom));
+        border-top-width: 4px;
+      }
+
+      h1 {
+        font-size: 25px;
+      }
+
+      h2 {
+        font-size: 19px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>《食刻营养》隐私政策</h1>
+      <p class="dates">生效日期：2026年09月27日<br>更新日期：2026年09月27日</p>
+    </header>
+
+    <p class="intro">欢迎您使用《食刻营养》（以下称“本应用”）。开发者李墨白（以下称“我们”）重视您的个人信息和隐私保护。本政策说明本应用在提供饮食记录、营养统计和就餐提醒等功能时如何处理相关信息，以及您可以如何管理本地数据与设备权限。请您在使用本应用前仔细阅读并理解本政策。</p>
+
+    <section id="information">
+      <h2>一、我们处理的信息</h2>
+      <p>本应用无需注册或登录账号。为实现饮食记录和营养分析功能，本应用会根据您的主动操作，在设备本地处理和保存以下信息：</p>
+      <ol>
+        <li>您记录的食物名称、食用重量、用餐日期以及相应的热量和营养素数据；</li>
+        <li>您设置的每日热量、碳水化合物、脂肪和蛋白质目标；</li>
+        <li>您设置的早餐、午餐和晚餐时间，以及当天的就餐确认状态；</li>
+        <li>通知提醒开关、应用页面状态等必要设置。</li>
+      </ol>
+      <p>本应用不会主动收集您的姓名、身份证号码、手机号、精确位置、联系人、相册内容、健康档案或设备标识符，也不会将上述饮食记录和设置主动上传至开发者服务器。</p>
+    </section>
+
+    <section id="purpose">
+      <h2>二、信息的使用目的</h2>
+      <p>本地保存的信息仅用于以下功能：</p>
+      <ol>
+        <li>计算并展示每日热量及营养素摄入量；</li>
+        <li>生成近7天或近30天的营养历史趋势；</li>
+        <li>展示当天营养详情和目标完成情况；</li>
+        <li>按照您设置的时间安排三餐提醒；</li>
+        <li>恢复您上次保存的应用设置。</li>
+      </ol>
+      <div class="notice">本应用提供的营养数据、摄入建议和统计结果仅用于日常饮食记录与参考，不能替代医生、营养师的诊断、治疗或专业建议。</div>
+    </section>
+
+    <section id="permission">
+      <h2>三、设备权限说明</h2>
+      <p>本应用会根据功能需要使用以下系统权限或系统能力：</p>
+      <div class="permission-list">
+        <p><strong>通知与提醒权限（ohos.permission.PUBLISH_AGENT_REMINDER）</strong><br>用于在应用退出前台后，按照您设置的三餐时间发布就餐提醒。您关闭通知提醒后，本应用将停止创建相关提醒。</p>
+        <p><strong>振动权限（ohos.permission.VIBRATE）</strong><br>用于在就餐提醒触发时提供手表振动反馈。该权限不会用于收集任何个人信息。</p>
+      </div>
+      <p>通知能否显示或振动，还可能受到系统通知开关、通知类别、勿扰模式、省电策略和设备自身设置影响。您可以在应用设置或设备系统设置中管理相关权限。拒绝或关闭权限不会影响饮食记录和营养统计等核心功能，但对应的提醒或振动功能将无法正常使用。</p>
+    </section>
+
+    <section id="storage">
+      <h2>四、信息的存储、保留与删除</h2>
+      <p>饮食记录、营养目标和应用设置主要通过 HarmonyOS 本地存储能力保存在您当前使用的设备中。本应用暂不设置开发者云端账号或业务服务器，也不会主动将这些数据同步至开发者服务器。</p>
+      <p>为支持历史趋势功能，本应用最多保留最近30天的饮食记录，超过30天的相关记录会在应用读取数据时自动清理。营养目标、三餐时间及其他应用设置会在您修改、重置、清除应用数据或卸载应用前继续保留。</p>
+      <p>本应用允许系统备份与恢复应用数据。是否实际备份、备份位置及恢复方式由 HarmonyOS 系统和您的设备设置决定，并受系统服务相应规则约束。该系统备份不代表数据会上传至开发者服务器。</p>
+      <p>您可以通过应用内相应功能删除单条饮食记录，也可以在系统设置中清除本应用数据或卸载本应用。清除或卸载后，本地数据通常无法恢复。</p>
+    </section>
+
+    <section id="source">
+      <h2>五、营养数据来源</h2>
+      <p>应用内食物营养数据主要参考公开发布的《中国食物成分表》及用户自行录入的信息。由于食物品种、产地、加工工艺和烹饪方式不同，实际营养含量可能存在差异。本应用不会根据这些数据自动作出医疗判断。</p>
+    </section>
+
+    <section id="third-party">
+      <h2>六、第三方服务与信息共享</h2>
+      <p>本应用当前未接入广告、统计分析、支付、账号登录或第三方推送 SDK，不会出售、出租或主动向第三方共享您的饮食记录和营养设置。</p>
+      <p>三餐提醒由 HarmonyOS 系统通知与后台提醒能力完成。系统在执行通知、备份或权限管理时，可能按照系统自身规则处理必要信息。如未来新增第三方服务、联网功能或新的个人信息处理场景，我们将更新本政策，并在法律法规要求的情况下另行向您说明或取得同意。</p>
+    </section>
+
+    <section id="minors">
+      <h2>七、未成年人保护</h2>
+      <p>本应用不会主动识别或收集未成年人的身份信息。未成年人应在监护人指导下使用本应用并设置营养目标。若监护人认为未成年人在未获同意的情况下向我们提供了个人信息，请通过本政策末尾的联系方式联系我们。</p>
+    </section>
+
+    <section id="rights">
+      <h2>八、您的权利</h2>
+      <p>您可以通过以下方式管理相关数据和权限：</p>
+      <ol>
+        <li>查看或删除已保存的饮食记录；</li>
+        <li>修改营养目标、三餐时间及通知提醒设置；</li>
+        <li>在设备系统设置中管理本应用的通知和相关权限；</li>
+        <li>清除应用数据或卸载应用，以删除设备本地保存的数据；</li>
+        <li>通过下方联系方式提出隐私相关咨询、意见或建议。</li>
+      </ol>
+      <p>由于本应用不建立用户账号，也不将饮食数据上传至开发者服务器，我们无法通过服务器为您查询、导出、修改或恢复设备本地已经删除的数据。</p>
+    </section>
+
+    <section id="security">
+      <h2>九、信息安全</h2>
+      <p>我们尽量减少不必要的信息处理，并将应用数据保存在设备本地。请您妥善保管设备并启用系统锁屏保护。受限于设备安全状态、系统漏洞或不可抗力，任何存储方式都无法保证绝对安全；如发现可能影响本应用数据安全的问题，请及时通过下方联系方式联系我们。</p>
+    </section>
+
+    <section id="updates">
+      <h2>十、隐私政策的更新</h2>
+      <p>我们可能根据应用功能、法律法规或监管要求更新本政策。更新后的政策将标注新的更新日期，并通过应用内可访问页面或其他适当方式公布。若发生个人信息处理目的、方式、范围或权限使用方面的重大变化，我们将依法采取适当方式向您说明。</p>
+    </section>
+
+    <section id="contact">
+      <h2>十一、联系我们</h2>
+      <div class="contact">
+        <p><strong>个人信息处理者：</strong>李墨白</p>
+        <p><strong>联系邮箱：</strong>2798025402@qq.com</p>
+        <p><strong>其他联系方式：</strong>15503642375</p>
+      </div>
+      <p>如您对本隐私政策、设备权限或个人信息处理有任何疑问、意见或建议，请通过上述方式联系我们。我们将在收到您的请求后，于合理期限内进行核实和处理。</p>
+    </section>
+
+    <footer>食刻营养 · 隐私政策</footer>
+  </main>
+</body>
+</html>

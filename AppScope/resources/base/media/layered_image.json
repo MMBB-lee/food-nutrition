@@ -1,0 +1,7 @@
+{
+  "layered-image":
+  {
+    "background" : "$media:nutrition_icon_background",
+    "foreground" : "$media:nutrition_icon_foreground"
+  }
+}
