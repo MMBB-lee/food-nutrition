@@ -65,32 +65,38 @@ struct HistoryTrendPage {
     return metric === 'calories' ? 'kcal' : 'g';
   }
 
-  getAverageValue(metric: string): number {
-    if (this.history.length === 0) return 0;
-    let total: number = 0;
-    this.history.forEach((day: NutritionHistoryDay) => {
-      total += this.getMetricValue(day, metric);
-    });
-    return total / this.history.length;
+  getIncludedDays(metric: string): NutritionHistoryDay[] {
+    return this.history.filter((day: NutritionHistoryDay) => this.getMetricTarget(day, metric) > 0);
   }
 
-  getAverageTarget(metric: string): number {
-    if (this.history.length === 0) return 0;
+  getAverageValue(metric: string): number {
+    const includedDays: NutritionHistoryDay[] = this.getIncludedDays(metric);
+    if (includedDays.length === 0) return 0;
     let total: number = 0;
-    this.history.forEach((day: NutritionHistoryDay) => {
-      total += this.getMetricTarget(day, metric);
+    includedDays.forEach((day: NutritionHistoryDay) => {
+      total += this.getMetricValue(day, metric);
     });
-    return total / this.history.length;
+    return total / includedDays.length;
   }
 
   getAchievedDays(metric: string): number {
     let achievedDays: number = 0;
-    this.history.forEach((day: NutritionHistoryDay) => {
+    this.getIncludedDays(metric).forEach((day: NutritionHistoryDay) => {
       if (this.getMetricValue(day, metric) >= this.getMetricTarget(day, metric)) {
         achievedDays++;
       }
     });
     return achievedDays;
+  }
+
+  getAverageTargetDifference(metric: string): number {
+    const includedDays: NutritionHistoryDay[] = this.getIncludedDays(metric);
+    if (includedDays.length === 0) return 0;
+    let differenceTotal: number = 0;
+    includedDays.forEach((day: NutritionHistoryDay) => {
+      differenceTotal += this.getMetricValue(day, metric) - this.getMetricTarget(day, metric);
+    });
+    return differenceTotal / includedDays.length;
   }
 
   formatMetricValue(value: number, metric: string): string {
@@ -99,10 +105,13 @@ struct HistoryTrendPage {
   }
 
   getComparisonText(metric: string): string {
-    const difference: number = this.getAverageValue(metric) - this.getAverageTarget(metric);
+    const includedDayCount: number = this.getIncludedDays(metric).length;
+    if (includedDayCount === 0) return '与目标相比：暂无有效目标日';
+    const difference: number = this.getAverageTargetDifference(metric);
     if (Math.abs(difference) < 0.05) return '与目标相比：平均持平';
-    const direction: string = difference > 0 ? '多' : '少';
-    return `与目标相比：平均${direction}${this.formatMetricValue(Math.abs(difference), metric)} ${this.getMetricUnit(metric)}`;
+    const direction: string = difference > 0 ? '超出' : '低于';
+    return `与目标相比：平均${direction}${this.formatMetricValue(Math.abs(difference), metric)} ` +
+      `${this.getMetricUnit(metric)}`;
   }
 
   getChartStep(metric: string): number {
@@ -298,10 +307,11 @@ struct HistoryTrendPage {
       }
 
       Column({ space: 2 }) {
-        Text(`${this.selectedRange}日平均：${this.formatMetricValue(this.getAverageValue(metric), metric)} ${this.getMetricUnit(metric)}`)
+        Text(`有效目标日平均（${this.getIncludedDays(metric).length}天）：` +
+          `${this.formatMetricValue(this.getAverageValue(metric), metric)} ${this.getMetricUnit(metric)}`)
           .fontSize(8)
           .fontColor('#F7FAF8')
-        Text(`达标天数：${this.getAchievedDays(metric)} / ${this.history.length}天`)
+        Text(`达标天数：${this.getAchievedDays(metric)} / ${this.selectedRange}天`)
           .fontSize(8)
           .fontColor('#F7FAF8')
         Text(this.getComparisonText(metric))

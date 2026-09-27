@@ -2,40 +2,14 @@ import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { reminderAgentManager } from '@kit.BackgroundTasksKit';
 import { notificationManager } from '@kit.NotificationKit';
-import { util } from '@kit.ArkTS';
 import { router } from '@kit.ArkUI';
 import { DailyNutritionSummary, FoodRecord } from '../model/NutritionModels';
 import { LocalNutritionStore } from '../service/LocalNutritionStore';
 
-interface FoodItem {
-  id: number;
-  name: string;
-  category: string;
-  topCategory: string;
-  emoji: string;
-  edible: number;
-  energyKCal: number;
-  protein: number;
-  fat: number;
-  carbohydrate: number;
-  dietaryFiber: number;
-  cholesterol: number;
-  vitaminA: number;
-  thiamin: number;
-  riboflavin: number;
-  niacin: number;
-  vitaminC: number;
-  vitaminETotal: number;
-  calcium: number;
-  phosphorus: number;
-  potassium: number;
-  sodium: number;
-  magnesium: number;
-  iron: number;
-  zinc: number;
-  selenium: number;
-  copper: number;
-  manganese: number;
+interface MealTimeSettings {
+  breakfastMinutes: number;
+  lunchMinutes: number;
+  dinnerMinutes: number;
 }
 
 @Entry
@@ -74,16 +48,6 @@ struct Index {
   @State minuteWheelOffset: number = 0;
   @State allMealsCompleted: boolean = false;
   @State completionDayKey: string = '';
-  @State showFoodSearch: boolean = false;
-  @State showFoodDetail: boolean = false;
-  @State showFoodWeight: boolean = false;
-  @State foodItems: FoodItem[] = [];
-  @State foodDataLoaded: boolean = false;
-  @State foodDataError: boolean = false;
-  @State foodSearchText: string = '';
-  @State selectedFoodIndex: number = -1;
-  @State foodWeight: number = 100;
-  @State foodEntryFromMealConfirm: boolean = false;
   @State todayCalories: number = 0;
   @State todayProtein: number = 0;
   @State todayFat: number = 0;
@@ -102,6 +66,8 @@ struct Index {
   @State fatTargetInput: string = '60';
   @State dashboardNutrientIndex: number = 0;
   private clockTimer: number = -1;
+  private dashboardDayKey: string = '';
+  private mealTimeSavePending: boolean = false;
   private notificationToastTimer: number = -1;
   private mealReminderIds: number[] = [];
   private settingsPreferences: preferences.Preferences | undefined = undefined;
@@ -119,6 +85,9 @@ struct Index {
     this.clockTimer = setInterval(() => {
       this.nowTimestamp = Date.now();
       this.resetDailyCompletionIfNeeded();
+      if (this.dashboardDayKey !== LocalNutritionStore.getDayKey(this.nowTimestamp)) {
+        this.loadDashboardData();
+      }
     }, 30000);
   }
 
@@ -163,14 +132,6 @@ struct Index {
       this.showSettings = true;
     } else if (this.showSettings) {
       this.showSettings = false;
-    } else if (this.showFoodWeight) {
-      this.showFoodWeight = false;
-      this.showFoodDetail = true;
-    } else if (this.showFoodDetail) {
-      this.showFoodDetail = false;
-      this.showFoodSearch = true;
-    } else if (this.showFoodSearch) {
-      this.closeFoodRecord();
     }
   }
 
@@ -199,17 +160,28 @@ struct Index {
   async loadDashboardData(): Promise<void> {
     try {
       const context: common.Context = this.getUIContext().getHostContext() as common.Context;
+      await LocalNutritionStore.getFirstUseDayKey(context);
+      const dayKey: string = LocalNutritionStore.getDayKey();
       const records: FoodRecord[] = await LocalNutritionStore.getFoodRecordsByDay(
-        context, LocalNutritionStore.getDayKey());
+        context, dayKey);
       const summary: DailyNutritionSummary = LocalNutritionStore.summarize(records);
+      const calorieTarget: number = await LocalNutritionStore.getCalorieTarget(context);
+      const carbohydrateTarget: number = await LocalNutritionStore.getCarbohydrateTarget(context);
+      const proteinTarget: number = await LocalNutritionStore.getProteinTarget(context);
+      const fatTarget: number = await LocalNutritionStore.getFatTarget(context);
+      if (dayKey !== LocalNutritionStore.getDayKey()) {
+        await this.loadDashboardData();
+        return;
+      }
+      this.dashboardDayKey = dayKey;
       this.todayCalories = summary.calories;
       this.todayProtein = summary.protein;
       this.todayFat = summary.fat;
       this.todayCarbohydrate = summary.carbohydrate;
-      this.dailyCalorieTarget = await LocalNutritionStore.getCalorieTarget(context);
-      this.dailyCarbohydrateTarget = await LocalNutritionStore.getCarbohydrateTarget(context);
-      this.dailyProteinTarget = await LocalNutritionStore.getProteinTarget(context);
-      this.dailyFatTarget = await LocalNutritionStore.getFatTarget(context);
+      this.dailyCalorieTarget = calorieTarget;
+      this.dailyCarbohydrateTarget = carbohydrateTarget;
+      this.dailyProteinTarget = proteinTarget;
+      this.dailyFatTarget = fatTarget;
       this.editingCalorieTarget = this.dailyCalorieTarget;
       this.calorieTargetInput = `${this.dailyCalorieTarget}`;
       this.editingCarbohydrateTarget = this.dailyCarbohydrateTarget;
@@ -289,14 +261,17 @@ struct Index {
     }
   }
 
-  async persistMealSettings(markSetupComplete: boolean = false): Promise<boolean> {
+  async persistMealSettings(markSetupComplete: boolean = false, times?: MealTimeSettings): Promise<boolean> {
     if (this.settingsPreferences === undefined) {
       return false;
     }
     try {
-      await this.settingsPreferences.put('breakfastMinutes', this.breakfastMinutes);
-      await this.settingsPreferences.put('lunchMinutes', this.lunchMinutes);
-      await this.settingsPreferences.put('dinnerMinutes', this.dinnerMinutes);
+      await this.settingsPreferences.put('breakfastMinutes',
+        times === undefined ? this.breakfastMinutes : times.breakfastMinutes);
+      await this.settingsPreferences.put('lunchMinutes',
+        times === undefined ? this.lunchMinutes : times.lunchMinutes);
+      await this.settingsPreferences.put('dinnerMinutes',
+        times === undefined ? this.dinnerMinutes : times.dinnerMinutes);
       if (markSetupComplete) {
         await this.settingsPreferences.put('setupComplete', true);
       }
@@ -354,184 +329,6 @@ struct Index {
       url: 'pages/FoodRecord',
       params: { mealIndex: this.nextMealIndex }
     });
-  }
-
-  closeFoodRecord(): void {
-    this.showFoodSearch = false;
-    this.showFoodDetail = false;
-    this.showFoodWeight = false;
-    this.selectedFoodIndex = -1;
-  }
-
-  getFilteredFoods(): FoodItem[] {
-    const keyword: string = this.foodSearchText.trim();
-    if (keyword.length === 0) {
-      return this.getCommonFoods();
-    }
-    return this.foodItems.filter((food: FoodItem) => food.name.includes(keyword));
-  }
-
-  chooseFood(foodId: number): void {
-    this.selectedFoodIndex = this.foodItems.findIndex((food: FoodItem) => food.id === foodId);
-    if (this.selectedFoodIndex >= 0) {
-      this.foodWeight = 100;
-      this.showFoodSearch = false;
-      this.showFoodDetail = true;
-    }
-  }
-
-  getSelectedFood(): FoodItem {
-    if (this.selectedFoodIndex >= 0 && this.selectedFoodIndex < this.foodItems.length) {
-      return this.foodItems[this.selectedFoodIndex];
-    }
-    return this.foodItems[0];
-  }
-
-  getCommonFoods(): FoodItem[] {
-    const commonNames: string[] = [
-      '米饭（蒸，代表值）', '鸡蛋（代表值）', '鸡胸脯肉',
-      '苹果（代表值）', '纯牛奶（代表值，全脂）'
-    ];
-    const result: FoodItem[] = [];
-    commonNames.forEach((name: string) => {
-      const food: FoodItem | undefined = this.foodItems.find((item: FoodItem) => item.name === name);
-      if (food !== undefined) {
-        result.push(food);
-      }
-    });
-    return result;
-  }
-
-  getTopCategory(category: string): string {
-    const separatorIndex: number = category.indexOf('-');
-    return separatorIndex >= 0 ? category.substring(0, separatorIndex) : category;
-  }
-
-  getCategoryEmoji(topCategory: string): string {
-    if (topCategory === '乳类及其制品') return '🥛';
-    if (topCategory === '坚果种子类') return '🥜';
-    if (topCategory === '干豆类及其制品') return '🫘';
-    if (topCategory === '植物油') return '🫒';
-    if (topCategory === '水果类及其制品') return '🍎';
-    if (topCategory === '畜肉类及其制品') return '🥩';
-    if (topCategory === '禽肉类及其制品') return '🍗';
-    if (topCategory === '菌藻类') return '🍄';
-    if (topCategory === '蔬菜类及其制品') return '🥬';
-    if (topCategory === '薯类淀粉及其制品') return '🍠';
-    if (topCategory === '蛋类及其制品') return '🥚';
-    if (topCategory === '谷类及其制品') return '🌾';
-    if (topCategory === '鱼虾蟹贝类') return '🐟';
-    return '🍽️';
-  }
-
-  parseCsvRow(line: string): string[] {
-    const values: string[] = [];
-    let current: string = '';
-    let quoted: boolean = false;
-    for (let index: number = 0; index < line.length; index++) {
-      const character: string = line.charAt(index);
-      if (character === '"') {
-        if (quoted && index + 1 < line.length && line.charAt(index + 1) === '"') {
-          current += '"';
-          index++;
-        } else {
-          quoted = !quoted;
-        }
-      } else if (character === ',' && !quoted) {
-        values.push(current);
-        current = '';
-      } else {
-        current += character;
-      }
-    }
-    values.push(current);
-    return values;
-  }
-
-  parseFoodNumber(value: string): number {
-    const parsed: number = Number(value.trim());
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-
-  async loadFoodDatabase(): Promise<void> {
-    try {
-      const context: common.Context = this.getUIContext().getHostContext() as common.Context;
-      const content: Uint8Array = await context.resourceManager.getRawFileContent('food_composition.csv');
-      const csvText: string = new util.TextDecoder().decodeToString(content).replace(/\r/g, '');
-      const lines: string[] = csvText.split('\n');
-      const loadedFoods: FoodItem[] = [];
-      for (let index: number = 1; index < lines.length; index++) {
-        if (lines[index].trim().length === 0) continue;
-        const row: string[] = this.parseCsvRow(lines[index]);
-        if (row.length < 35 || row[2].trim().length === 0) continue;
-        const category: string = row[0].trim();
-        const topCategory: string = this.getTopCategory(category);
-        loadedFoods.push({
-          id: index,
-          name: row[2].trim(),
-          category: category,
-          topCategory: topCategory,
-          emoji: this.getCategoryEmoji(topCategory),
-          edible: this.parseFoodNumber(row[4]),
-          energyKCal: this.parseFoodNumber(row[6]),
-          protein: this.parseFoodNumber(row[8]),
-          fat: this.parseFoodNumber(row[9]),
-          carbohydrate: this.parseFoodNumber(row[10]),
-          dietaryFiber: this.parseFoodNumber(row[11]),
-          cholesterol: this.parseFoodNumber(row[12]),
-          vitaminA: this.parseFoodNumber(row[14]),
-          thiamin: this.parseFoodNumber(row[17]),
-          riboflavin: this.parseFoodNumber(row[18]),
-          niacin: this.parseFoodNumber(row[19]),
-          vitaminC: this.parseFoodNumber(row[20]),
-          vitaminETotal: this.parseFoodNumber(row[21]),
-          calcium: this.parseFoodNumber(row[25]),
-          phosphorus: this.parseFoodNumber(row[26]),
-          potassium: this.parseFoodNumber(row[27]),
-          sodium: this.parseFoodNumber(row[28]),
-          magnesium: this.parseFoodNumber(row[29]),
-          iron: this.parseFoodNumber(row[30]),
-          zinc: this.parseFoodNumber(row[31]),
-          selenium: this.parseFoodNumber(row[32]),
-          copper: this.parseFoodNumber(row[33]),
-          manganese: this.parseFoodNumber(row[34])
-        });
-      }
-      this.foodItems = loadedFoods;
-      this.foodDataLoaded = true;
-      this.foodDataError = false;
-    } catch (error) {
-      console.error(`load food database failed: ${JSON.stringify(error)}`);
-      this.foodDataLoaded = true;
-      this.foodDataError = true;
-    }
-  }
-
-  changeFoodWeight(offset: number): void {
-    this.foodWeight = Math.max(1, Math.min(2000, this.foodWeight + offset));
-  }
-
-  setFoodWeight(value: string): void {
-    const parsed: number = Number(value);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      this.foodWeight = Math.max(1, Math.min(2000, Math.floor(parsed)));
-    }
-  }
-
-  calculateFoodValue(valuePer100Gram: number): number {
-    return Math.round(valuePer100Gram * this.foodWeight / 10) / 10;
-  }
-
-  confirmFoodRecord(): void {
-    const food: FoodItem = this.getSelectedFood();
-    this.todayCalories += Math.round(food.energyKCal * this.foodWeight / 100);
-    this.todayProtein = Math.round((this.todayProtein +
-      this.calculateFoodValue(food.protein)) * 10) / 10;
-    this.todayFat = Math.round((this.todayFat + this.calculateFoodValue(food.fat)) * 10) / 10;
-    this.todayCarbohydrate = Math.round((this.todayCarbohydrate +
-      this.calculateFoodValue(food.carbohydrate)) * 10) / 10;
-    this.closeFoodRecord();
-    this.showNotificationStatus(`${food.name}已记录`);
   }
 
   aboutToDisappear(): void {
@@ -743,7 +540,8 @@ struct Index {
     this.setEditingNutritionTarget(kind, normalized);
   }
 
-  applyMealTime(meal: string, minutes: number): boolean {
+  async applyMealTime(meal: string, minutes: number): Promise<boolean> {
+    if (this.mealTimeSavePending) return false;
     const breakfast: number = meal === 'breakfast' ? minutes : this.breakfastMinutes;
     const lunch: number = meal === 'lunch' ? minutes : this.lunchMinutes;
     const dinner: number = meal === 'dinner' ? minutes : this.dinnerMinutes;
@@ -756,11 +554,25 @@ struct Index {
       return false;
     }
 
+    this.mealTimeSavePending = true;
+    let saved: boolean = false;
+    try {
+      saved = await this.persistMealSettings(false, {
+        breakfastMinutes: breakfast,
+        lunchMinutes: lunch,
+        dinnerMinutes: dinner
+      });
+    } finally {
+      this.mealTimeSavePending = false;
+    }
+    if (!saved) {
+      this.showNotificationStatus('就餐时间保存失败');
+      return false;
+    }
     this.breakfastMinutes = breakfast;
     this.lunchMinutes = lunch;
     this.dinnerMinutes = dinner;
     this.syncNextMealTime();
-    this.persistMealSettings();
     if (!this.showInitialSetup) {
       this.syncMealProgressWithTime();
     }
@@ -1166,9 +978,10 @@ struct Index {
     }
   }
 
-  saveCustomTime(): void {
+  async saveCustomTime(): Promise<void> {
     const minutes: number = this.customHour * 60 + this.customMinute;
-    if (!this.applyMealTime(this.editingMeal, minutes)) {
+    const saved: boolean = await this.applyMealTime(this.editingMeal, minutes);
+    if (!saved) {
       return;
     }
     this.showCustomTime = false;
@@ -1481,347 +1294,6 @@ struct Index {
           this.showQuickMenu = true;
         })
     }
-  }
-
-  @Builder
-  foodSearchPage() {
-    Column({ space: 6 }) {
-      Text('记录饮食')
-        .width(166)
-        .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#F7FAF8')
-        .textAlign(TextAlign.Center)
-
-      TextInput({ placeholder: '搜索食物', text: this.foodSearchText })
-        .width(166)
-        .height(30)
-        .fontSize(12)
-        .placeholderFont({ size: 12 })
-        .fontColor('#F4F7F5')
-        .placeholderColor('#748079')
-        .textAlign(TextAlign.Center)
-        .backgroundColor('#18211E')
-        .border({ width: 1, color: '#2B3933' })
-        .borderRadius(15)
-        .padding({ left: 12, right: 12 })
-        .onChange((value: string) => {
-          this.foodSearchText = value;
-        })
-
-      Text(this.foodSearchText.trim().length === 0 ? '常见食品' : '搜索结果')
-        .width(166)
-        .fontSize(9)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#C7D0CB')
-        .padding({ left: 10 })
-
-      Scroll(this.pageScroller) {
-        Column({ space: 4 }) {
-          if (!this.foodDataLoaded) {
-            Text('正在加载食品数据')
-              .fontSize(9)
-              .fontColor('#8F9B95')
-              .margin({ top: 18 })
-          } else if (this.foodDataError) {
-            Text('食品数据加载失败')
-              .fontSize(9)
-              .fontColor('#E78B8B')
-              .margin({ top: 18 })
-          } else if (this.getFilteredFoods().length === 0) {
-            Text('未找到相关食物')
-              .fontSize(9)
-              .fontColor('#8F9B95')
-              .margin({ top: 18 })
-          } else {
-            ForEach(this.getFilteredFoods(), (food: FoodItem) => {
-              Row({ space: 5 }) {
-                Text(food.emoji)
-                  .width(22)
-                  .fontSize(13)
-                  .textAlign(TextAlign.Center)
-                Column({ space: 1 }) {
-                  Text(food.name)
-                    .fontSize(10)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor('#F4F7F5')
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Text(`${food.category} · ${food.energyKCal} kcal/100g`)
-                    .fontSize(7)
-                    .fontColor('#8F9B95')
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                .alignItems(HorizontalAlign.Start)
-                .layoutWeight(1)
-                Text('›')
-                  .fontSize(16)
-                  .fontColor('#67D89A')
-              }
-              .width(166)
-              .height(32)
-              .padding({ left: 8, right: 10 })
-              .backgroundColor('#18211E')
-              .borderRadius(17)
-              .onClick(() => {
-                this.chooseFood(food.id);
-              })
-            }, (food: FoodItem) => `${food.id}`)
-          }
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .margin({ bottom: 15 })
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
-    }
-    .width('100%')
-    .height('100%')
-    .alignItems(HorizontalAlign.Center)
-    .padding({ top: 24, bottom: 28 })
-    .backgroundColor('#0A0E0C')
-  }
-
-  @Builder
-  nutrientDetailRow(label: string, value: number, unit: string) {
-    Row() {
-      Text(label)
-        .fontSize(7)
-        .fontColor('#AAB5AF')
-        .layoutWeight(1)
-      Text(`${value} ${unit}`)
-        .fontSize(7)
-        .fontColor('#F0F4F2')
-    }
-    .width(150)
-    .height(18)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor('#18211E')
-    .borderRadius(9)
-  }
-
-  @Builder
-  foodDetailPage() {
-    Column({ space: 5 }) {
-      Text('食品详情')
-        .width(166)
-        .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#F7FAF8')
-        .textAlign(TextAlign.Center)
-
-      Row({ space: 7 }) {
-        Text(this.getSelectedFood().emoji)
-          .width(30)
-          .fontSize(20)
-          .textAlign(TextAlign.Center)
-        Column({ space: 1 }) {
-          Text(this.getSelectedFood().name)
-            .fontSize(10)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#F4F7F5')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(this.getSelectedFood().category)
-            .fontSize(7)
-            .fontColor('#67D89A')
-            .maxLines(2)
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-      }
-      .width(166)
-      .padding({ top: 5, right: 9, bottom: 5, left: 8 })
-      .backgroundColor('#131B18')
-      .borderRadius(14)
-
-      Text('每100克可食部分的营养数据')
-        .width(150)
-        .fontSize(7)
-        .fontColor('#87938D')
-
-      Scroll(this.pageScroller) {
-        Column({ space: 2 }) {
-          this.nutrientDetailRow('可食部分', this.getSelectedFood().edible, '%')
-          this.nutrientDetailRow('能量', this.getSelectedFood().energyKCal, 'kcal')
-          this.nutrientDetailRow('蛋白质', this.getSelectedFood().protein, 'g')
-          this.nutrientDetailRow('脂肪', this.getSelectedFood().fat, 'g')
-          this.nutrientDetailRow('碳水化合物', this.getSelectedFood().carbohydrate, 'g')
-          this.nutrientDetailRow('膳食纤维', this.getSelectedFood().dietaryFiber, 'g')
-          this.nutrientDetailRow('胆固醇', this.getSelectedFood().cholesterol, 'mg')
-          this.nutrientDetailRow('维生素A', this.getSelectedFood().vitaminA, 'μg RAE')
-          this.nutrientDetailRow('维生素B1', this.getSelectedFood().thiamin, 'mg')
-          this.nutrientDetailRow('维生素B2', this.getSelectedFood().riboflavin, 'mg')
-          this.nutrientDetailRow('维生素C', this.getSelectedFood().vitaminC, 'mg')
-          this.nutrientDetailRow('维生素E', this.getSelectedFood().vitaminETotal, 'mg')
-          this.nutrientDetailRow('钙', this.getSelectedFood().calcium, 'mg')
-          this.nutrientDetailRow('磷', this.getSelectedFood().phosphorus, 'mg')
-          this.nutrientDetailRow('钾', this.getSelectedFood().potassium, 'mg')
-          this.nutrientDetailRow('钠', this.getSelectedFood().sodium, 'mg')
-          this.nutrientDetailRow('镁', this.getSelectedFood().magnesium, 'mg')
-          this.nutrientDetailRow('铁', this.getSelectedFood().iron, 'mg')
-          this.nutrientDetailRow('锌', this.getSelectedFood().zinc, 'mg')
-          this.nutrientDetailRow('硒', this.getSelectedFood().selenium, 'μg')
-          this.nutrientDetailRow('铜', this.getSelectedFood().copper, 'mg')
-          this.nutrientDetailRow('锰', this.getSelectedFood().manganese, 'mg')
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
-
-      Button('选择重量')
-        .width(88)
-        .height(25)
-        .fontSize(9)
-        .fontColor('#092117')
-        .backgroundColor('#67D89A')
-        .borderRadius(13)
-        .onClick(() => {
-          this.showFoodDetail = false;
-          this.showFoodWeight = true;
-        })
-    }
-    .width('100%')
-    .height('100%')
-    .alignItems(HorizontalAlign.Center)
-    .padding({ top: 24, bottom: 27 })
-    .backgroundColor('#0A0E0C')
-  }
-
-  @Builder
-  foodWeightPage() {
-    Column({ space: 6 }) {
-      Text('选择重量')
-        .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#F7FAF8')
-
-      Text(this.getSelectedFood().name)
-        .fontSize(11)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#67D89A')
-
-      Row({ space: 6 }) {
-        Button('-')
-          .width(30)
-          .height(28)
-          .fontSize(14)
-          .backgroundColor('#28332F')
-          .borderRadius(14)
-          .padding(0)
-          .onClick(() => {
-            this.changeFoodWeight(-10);
-          })
-        TextInput({ text: `${this.foodWeight}` })
-          .width(54)
-          .height(28)
-          .type(InputType.Number)
-          .fontSize(11)
-          .fontColor('#F7FAF8')
-          .textAlign(TextAlign.Center)
-          .backgroundColor('#18211E')
-          .borderRadius(14)
-          .padding(0)
-          .onChange((value: string) => {
-            this.setFoodWeight(value);
-          })
-        Text('g')
-          .fontSize(9)
-          .fontColor('#8F9B95')
-        Button('+')
-          .width(30)
-          .height(28)
-          .fontSize(14)
-          .backgroundColor('#28332F')
-          .borderRadius(14)
-          .padding(0)
-          .onClick(() => {
-            this.changeFoodWeight(10);
-          })
-      }
-
-      Row({ space: 5 }) {
-        Button('50g')
-          .width(42)
-          .height(22)
-          .fontSize(8)
-          .backgroundColor('#28332F')
-          .borderRadius(11)
-          .padding(0)
-          .onClick(() => { this.foodWeight = 50; })
-        Button('100g')
-          .width(42)
-          .height(22)
-          .fontSize(8)
-          .backgroundColor('#28332F')
-          .borderRadius(11)
-          .padding(0)
-          .onClick(() => { this.foodWeight = 100; })
-        Button('150g')
-          .width(42)
-          .height(22)
-          .fontSize(8)
-          .backgroundColor('#28332F')
-          .borderRadius(11)
-          .padding(0)
-          .onClick(() => { this.foodWeight = 150; })
-      }
-      .height(22)
-
-      Column({ space: 2 }) {
-        Text(`${Math.round(this.getSelectedFood().energyKCal * this.foodWeight / 100)} kcal`)
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#F5C96A')
-        Text(`蛋白质 ${this.calculateFoodValue(this.getSelectedFood().protein)}g  脂肪 ${this.calculateFoodValue(this.getSelectedFood().fat)}g`)
-          .fontSize(8)
-          .fontColor('#C9D2CD')
-        Text(`碳水 ${this.calculateFoodValue(this.getSelectedFood().carbohydrate)}g`)
-          .fontSize(8)
-          .fontColor('#70C9FF')
-      }
-      .width(166)
-      .padding({ top: 7, bottom: 7 })
-      .backgroundColor('#18211E')
-      .borderRadius(16)
-
-      Row({ space: 7 }) {
-        Button('返回')
-          .width(60)
-          .height(27)
-          .fontSize(9)
-          .fontColor('#D5DCD8')
-          .backgroundColor('#28332F')
-          .borderRadius(14)
-          .onClick(() => {
-            this.showFoodWeight = false;
-            this.showFoodDetail = true;
-          })
-        Button('确认记录')
-          .width(76)
-          .height(27)
-          .fontSize(9)
-          .fontColor('#092117')
-          .backgroundColor('#67D89A')
-          .borderRadius(14)
-          .onClick(() => {
-            this.confirmFoodRecord();
-          })
-      }
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor('#0A0E0C')
   }
 
   @Builder
