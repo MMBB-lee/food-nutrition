@@ -219,7 +219,10 @@ struct Index {
           context, this.breakfastMinutes, this.lunchMinutes, this.dinnerMinutes);
         this.applyMealProgress(resolvedIndex);
       } else {
-        this.initializeNextMeal();
+        this.allMealsCompleted = false;
+        this.completionDayKey = '';
+        this.nextMealIndex = 0;
+        this.nextMealTimestamp = 0;
       }
     } catch (error) {
       console.error(`load meal progress failed: ${JSON.stringify(error)}`);
@@ -279,13 +282,26 @@ struct Index {
   }
 
   async completeInitialSetup(): Promise<void> {
-    const saved: boolean = await this.persistMealSettings(true);
+    const saved: boolean = await this.persistMealSettings(false);
     if (!saved) {
       this.showNotificationStatus('设置保存失败');
       return;
     }
-    this.showInitialSetup = false;
-    await this.syncMealProgressWithTime();
+    try {
+      const context: common.Context = this.getUIContext().getHostContext() as common.Context;
+      const resolvedIndex: number = await MealProgressStore.resetFromSettings(
+        context, this.breakfastMinutes, this.lunchMinutes, this.dinnerMinutes);
+      const setupCompleted: boolean = await this.persistMealSettings(true);
+      if (!setupCompleted) {
+        this.showNotificationStatus('设置保存失败');
+        return;
+      }
+      this.showInitialSetup = false;
+      this.applyMealProgress(resolvedIndex);
+    } catch (error) {
+      console.error(`initialize meal progress from settings failed: ${JSON.stringify(error)}`);
+      this.showNotificationStatus('设置保存失败');
+    }
   }
 
   openFoodRecord(): void {
@@ -1506,6 +1522,21 @@ struct Index {
   }
 
   @Builder
+  privacyQrCode() {
+    Stack({ alignContent: Alignment.Center }) {
+      Image($r('app.media.privacy_qr'))
+        .width(120)
+        .height(120)
+        .objectFit(ImageFit.Contain)
+    }
+    .width(108)
+    .height(108)
+    .backgroundColor('#FFFFFF')
+    .borderRadius(6)
+    .clip(true)
+  }
+
+  @Builder
   privacyPermissionsPage() {
     Column({ space: 6 }) {
       Text('隐私权限')
@@ -1519,12 +1550,7 @@ struct Index {
         .fontSize(9)
         .fontColor('#DDE4E0')
 
-      Image($r('app.media.privacy_qr'))
-        .width(108)
-        .height(108)
-        .objectFit(ImageFit.Contain)
-        .backgroundColor('#FFFFFF')
-        .borderRadius(6)
+      this.privacyQrCode()
 
       Button('返回')
         .width(70)
@@ -1765,12 +1791,7 @@ struct Index {
         .fontColor('#8F9B95')
         .textAlign(TextAlign.Center)
 
-      Image($r('app.media.privacy_qr'))
-        .width(108)
-        .height(108)
-        .objectFit(ImageFit.Contain)
-        .backgroundColor('#FFFFFF')
-        .borderRadius(6)
+      this.privacyQrCode()
 
       Row({ space: 8 }) {
         Button('不同意')

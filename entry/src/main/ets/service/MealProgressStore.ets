@@ -50,6 +50,14 @@ export class MealProgressStore {
     return resolvedIndex;
   }
 
+  static async resetFromSettings(context: common.Context, breakfastMinutes: number,
+    lunchMinutes: number, dinnerMinutes: number, timestamp: number = Date.now()): Promise<number> {
+    const calculatedIndex: number = MealProgressStore.calculateAutomaticIndex(
+      breakfastMinutes, lunchMinutes, dinnerMinutes, timestamp);
+    await MealProgressStore.save(context, NutritionDateUtils.getDayKey(timestamp), calculatedIndex);
+    return calculatedIndex;
+  }
+
   static async resolveFromSettings(context: common.Context, timestamp: number = Date.now()): Promise<number> {
     const store: preferences.Preferences = await NutritionPreferences.getStore(context);
     const breakfastMinutes: number = await store.get(BREAKFAST_MINUTES_KEY, 480) as number;
